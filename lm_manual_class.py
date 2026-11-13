@@ -245,29 +245,30 @@ class lm_manual:
         plt.show()
 
     def plot_diagnostics(self, max_points=2000, random_state=42):
-        """Show the same four diagnostics for simple or multiple regression.
+        """Plot four regression diagnostics for simple or multiple regression."""
 
-        Large datasets are sampled only for plotting/LOWESS; the model is
-        always fitted and its diagnostics computed on every valid observation.
-        """
         if max_points < 2:
             raise ValueError("max_points must be at least 2")
         valid = np.flatnonzero(np.isfinite(self.std_residuals))
         if len(valid) < 2:
             raise ValueError("Diagnostics unavailable for this model")
+
+        # Sample large datasets for plotting only
         if len(valid) > max_points:
             rng = np.random.default_rng(random_state)
             valid = rng.choice(valid, size=max_points, replace=False)
-
-        fitted = self.fitted_y[valid]
-        residuals = self.residuals[valid]
-        standardized = self.std_residuals[valid]
-        scale = self.scale_location[valid]
-        leverage = self.leverage[valid]
+        fitted = np.asarray(self.fitted_y)[valid]
+        residuals = np.asarray(self.residuals)[valid]
+        standardized = np.asarray(self.std_residuals)[valid]
+        scale = np.asarray(self.scale_location)[valid]
+        leverage = np.asarray(self.leverage)[valid]
         fig, ax = plt.subplots(2, 2, figsize=(12, 9))
 
-        # Residuals vs fitted values.
-        sns.scatterplot(x=fitted, y=residuals, ax=ax[0, 0], s=18, alpha=0.6)
+        # 1. Residuals vs Fitted
+        sns.scatterplot(
+            x=fitted, y=residuals,
+            ax=ax[0, 0], s=18, alpha=0.6
+        )
         smooth = lowess(residuals, fitted, return_sorted=True)
         ax[0, 0].plot(smooth[:, 0], smooth[:, 1], color="red")
         ax[0, 0].axhline(0, color="gray", linestyle="--")
@@ -275,36 +276,68 @@ class lm_manual:
         ax[0, 0].set_xlabel(f"Fitted {self.y_name}")
         ax[0, 0].set_ylabel(f"{self.y_name} Residuals")
 
-        # Normal Q-Q plot.
+        # 2. Normal Q-Q
         stats.probplot(standardized, dist="norm", plot=ax[0, 1])
         ax[0, 1].set_title("Normal Q-Q")
 
-        # Scale-location.
-        sns.scatterplot(x=fitted, y=scale, ax=ax[1, 0], s=18, alpha=0.6)
+        # 3. Scale-Location
+        sns.scatterplot(
+            x=fitted, y=scale,
+            ax=ax[1, 0], s=18, alpha=0.6
+        )
         smooth = lowess(scale, fitted, return_sorted=True)
         ax[1, 0].plot(smooth[:, 0], smooth[:, 1], color="red")
         ax[1, 0].set_title("Scale-Location")
         ax[1, 0].set_xlabel(f"Fitted {self.y_name}")
         ax[1, 0].set_ylabel("√|Standardized Residuals|")
 
-        # Standardized residuals vs leverage with Cook's distance contours.
-        sns.scatterplot(x=leverage, y=standardized, ax=ax[1, 1], s=18, alpha=0.6)
-        ax[1, 1].axhline(0, color="gray", linestyle="--")
-        high = min(0.999, max(float(leverage.max()) * 1.2, 0.00001))
-        low = max(0.000001, high / 1000)
-        h = np.linspace(low, high, 200)
+        # 4. Residuals vs Leverage
+        ax4 = ax[1, 1]
+        sns.scatterplot(
+            x=leverage, y=standardized,
+            ax=ax4, s=18, alpha=0.6
+        )
+        ax4.axhline(0, color="gray", linestyle="--")
+
+        # Set axis limits
+        limit = max(3, float(np.max(np.abs(standardized))) * 1.2)
+        ax4.set_ylim(-limit, limit)
+        high = max(float(leverage.max()) * 1.1, 0.00001)
+        ax4.set_xlim(0, high)
+
+        # Cook's distance contours
+        h = np.linspace(
+            max(high / 1000, 1e-8),
+            min(high, 0.999999),
+            300
+        )
+        contours_visible = False
         for distance in [0.5, 1.0]:
             bound = np.sqrt(distance * (self.p + 1) * (1 - h) / h)
-            ax[1, 1].plot(h, bound, "r--", alpha=0.5)
-            ax[1, 1].plot(h, -bound, "r--", alpha=0.5, label=f"Cook's D = {distance}")
-        limit = max(3, float(np.max(np.abs(standardized))) * 1.2)
-        ax[1, 1].set_ylim(-limit, limit)
-        ax[1, 1].set_title("Residuals vs Leverage")
-        ax[1, 1].set_xlabel("Leverage")
-        ax[1, 1].set_ylabel("Standardized Residuals")
-        ax[1, 1].legend()
+            visible = np.isfinite(bound) & (bound <= limit)
+            if np.any(visible):
+                ax4.plot(h[visible], bound[visible],"r--", alpha=0.5,label=f"Cook's D = {distance}")
+                ax4.plot(h[visible], -bound[visible],"r--", alpha=0.5)
+                contours_visible = True
+        ax4.set_title("Residuals vs Leverage")
+        ax4.set_xlabel("Leverage")
+        ax4.set_ylabel("Standardized Residuals")
+
+        # Scientific notation for small leverage values
+        ax4.ticklabel_format(
+            axis="x",
+            style="sci",
+            scilimits=(0, 0)
+        )
+        # Reduce overlapping X-axis labels
+        ax4.xaxis.set_major_locator(plt.MaxNLocator(5))
+        # Only show legend when contours are visible
+        if contours_visible:
+            ax4.legend()
         plt.tight_layout()
         plt.show()
+
+        
         
     def vif(self):
         if self.p == 1:
