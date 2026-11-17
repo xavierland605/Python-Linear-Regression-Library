@@ -140,8 +140,6 @@ class lm_manual:
             self.p_beta_1 = self.p_betas[1]
             self.ci_beta_1 = tuple(self.ci_betas[1])
 
-        self.summary()
-
     def summary(self):
         """Print an OLS summary for either simple or multiple regression."""
         print("OLS Summary:")
