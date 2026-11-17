@@ -30,6 +30,7 @@ class lm_manual:
             if isinstance(name, str) and name.strip():
                 self.y_name = name
 
+
         # Convert input data and validate its shape.
         try:
             if isinstance(X, (pd.Series, pd.DataFrame)):
